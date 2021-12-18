@@ -1,4 +1,4 @@
-package fb_bot
+package facebot
 
 import (
 	"bytes"

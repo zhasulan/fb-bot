@@ -1,4 +1,4 @@
-module fb_bot
+module github.com/zhasulan/fb-bot
 
 go 1.17
 
