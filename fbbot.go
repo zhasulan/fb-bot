@@ -26,7 +26,8 @@ type Message struct {
 	Chat *Chat  `json:"chat"`
 	Text string `json:"text"`
 
-	Contact Contact
+	Contact *Contact `json:"contact"`
+	Voice   *Voice   `json:"voice"`
 }
 
 const (
