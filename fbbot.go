@@ -2,13 +2,23 @@ package facebot
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 // author zhasulan
 // created on 15.12.21 23:00
+
+type Chat struct {
+	ID int64
+}
+
+type Message struct {
+	Chat
+}
 
 const (
 	Text = "\atext"
@@ -46,10 +56,73 @@ func (f *Bot) Handle(endpoint, handler interface{}) {
 	}
 }
 
-func (f *Bot) Send(body []byte) error {
+type ReplyButton struct {
+	Text string `json:"text"`
+}
+
+type ReplyMarkup struct {
+	ReplyKeyboard [][]ReplyButton `json:"keyboard,omitempty"`
+}
+
+type SendOptions struct {
+	ReplyMarkup         ReplyMarkup
+	ParseMode           interface{}
+	DisableNotification interface{}
+}
+
+func (f *Bot) Send(chat Chat, what interface{}, options ...interface{}) (*Message, error) {
+
+	var text string
+	switch w := what.(type) {
+	case string:
+		text = w
+	}
+
+	var elements []Element
+	for _, option := range options {
+		switch o := option.(type) {
+		case SendOptions:
+			for _, replyButtons := range o.ReplyMarkup.ReplyKeyboard {
+				var buttons []Button
+
+				for _, replyButton := range replyButtons {
+					buttons = append(buttons, Button{
+						Type:    "postback",
+						Title:   replyButton.Text,
+						Payload: "",
+					})
+				}
+
+				elements = append(elements, Element{
+					Title:   "➡",
+					Buttons: buttons,
+				})
+			}
+		}
+	}
+
+	textResponse := TextResponse{
+		Recipient: FBChat{ID: strconv.FormatInt(chat.ID, 10)},
+		Message: TextMessage{
+			Text: &text,
+			Attachment: &Attachment{
+				Type: "template",
+				Payload: &Payload{
+					TemplateType: "generic",
+					Elements:     elements,
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(textResponse)
+	if err != nil {
+		return nil, err
+	}
+
 	request, err := http.NewRequest(http.MethodPost, "https://graph.facebook.com/v2.6/me/messages", bytes.NewBuffer(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	query := request.URL.Query()
@@ -60,7 +133,7 @@ func (f *Bot) Send(body []byte) error {
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -70,10 +143,10 @@ func (f *Bot) Send(body []byte) error {
 	}()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("facebook return error status code: %d", response.StatusCode)
+		return nil, fmt.Errorf("facebook return error status code: %d", response.StatusCode)
 	}
 
-	return nil
+	return nil, nil // todo return message id
 }
 
 func (f *Bot) Start() {

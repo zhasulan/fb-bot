@@ -47,11 +47,11 @@ func WebhookVerify(bot *Bot) fasthttp.RequestHandler {
 	}
 }
 
-type Chat struct {
+type FBChat struct {
 	ID string `json:"id"`
 }
 
-type Message struct {
+type SendMessage struct {
 	MID  string `json:"mid"`
 	Text string `json:"text"`
 }
@@ -61,11 +61,11 @@ type Read struct {
 }
 
 type Messaging struct {
-	Sender    Chat     `json:"sender"`
-	Recipient Chat     `json:"recipient"`
-	Timestamp int      `json:"timestamp"`
-	Message   *Message `json:"message"`
-	Read      *Read    `json:"read"`
+	Sender    FBChat       `json:"sender"`
+	Recipient FBChat       `json:"recipient"`
+	Timestamp int          `json:"timestamp"`
+	Message   *SendMessage `json:"message"`
+	Read      *Read        `json:"read"`
 }
 
 type Entry struct {
@@ -121,7 +121,7 @@ type TextMessage struct {
 }
 
 type TextResponse struct {
-	Recipient     Chat        `json:"recipient,omitempty"`
+	Recipient     FBChat      `json:"recipient,omitempty"`
 	MessagingType *string     `json:"messaging_type,omitempty"`
 	Message       TextMessage `json:"message,omitempty"`
 }
@@ -149,10 +149,10 @@ func WebhookListen(bot *Bot) fasthttp.RequestHandler {
 	}
 }
 
-func TextHandler(bot *Bot, recipient Chat, text string) {
+func TextHandler(bot *Bot, recipient FBChat, text string) {
 	textHandler, exist := bot.handlers[Text]
 	if exist {
-		handler, ok := textHandler.(func(recipient Chat, message string))
+		handler, ok := textHandler.(func(recipient FBChat, message string))
 		if ok {
 			handler(recipient, text)
 			return
