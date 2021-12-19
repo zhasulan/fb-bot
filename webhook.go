@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 // author zhasulan
@@ -152,9 +153,20 @@ func WebhookListen(bot *Bot) fasthttp.RequestHandler {
 func TextHandler(bot *Bot, recipient FBChat, text string) {
 	textHandler, exist := bot.handlers[OnText]
 	if exist {
-		handler, ok := textHandler.(func(recipient FBChat, message string))
+		handler, ok := textHandler.(func(message *Message))
 		if ok {
-			handler(recipient, text)
+			chatID, _ := strconv.ParseInt(recipient.ID, 10, 64)
+			handler(&Message{
+				Chat: &Chat{
+					ID:        chatID,
+					FirstName: "",
+					LastName:  "",
+					Username:  "",
+				},
+				Text:    text,
+				Contact: nil,
+				Voice:   nil,
+			})
 			return
 		}
 	}
