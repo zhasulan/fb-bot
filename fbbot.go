@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // author zhasulan
@@ -58,8 +59,12 @@ type Bot struct {
 	handlers map[string]interface{}
 }
 
-func (b *Bot) ChatByID() (Chat, error) {
-	return Chat{}, nil
+func (b *Bot) ChatByID(id string) (*Chat, error) {
+	return nil, nil
+}
+
+func (b *Bot) GetFile(file *File) (io.ReadCloser, error) {
+	return nil, nil
 }
 
 func (b *Bot) Handle(endpoint, handler interface{}) {
@@ -81,13 +86,15 @@ type ReplyMarkup struct {
 	ReplyKeyboard       [][]ReplyButton `json:"keyboard,omitempty"`
 	ResizeReplyKeyboard bool            `json:"resize_reply_keyboard"`
 	ReplyKeyboardRemove bool            `json:"reply_keyboard_remove"`
+
+	InlineKeyboard [][]InlineButton `json:"inline_keyboard,omitempty"`
 }
 
-func (r *ReplyMarkup) Text() Btn {
+func (r *ReplyMarkup) Text(text string) Btn {
 	return Btn{}
 }
 
-func (r *ReplyMarkup) Contact() Btn {
+func (r *ReplyMarkup) Contact(text string) Btn {
 	return Btn{}
 }
 
@@ -267,3 +274,56 @@ const (
 	ModeMarkdownV2 ParseMode = "MarkdownV2"
 	ModeHTML       ParseMode = "HTML"
 )
+
+func FromReader(reader io.Reader) File {
+	return File{FileReader: reader}
+}
+
+func (r *ReplyMarkup) Data(text, unique string, data ...string) Btn {
+	return Btn{
+		Unique: unique,
+		Text:   text,
+		Data:   strings.Join(data, "|"),
+	}
+}
+
+func (r *ReplyMarkup) Inline(rows ...Row) {
+	inlineKeys := make([][]InlineButton, 0, len(rows))
+	for i, row := range rows {
+		keys := make([]InlineButton, 0, len(row))
+		for j, btn := range row {
+			btn := btn.Inline()
+			if btn == nil {
+				panic(fmt.Sprintf(
+					"telebot: button row %d column %d is not an inline button",
+					i, j))
+			}
+			keys = append(keys, *btn)
+		}
+		inlineKeys = append(inlineKeys, keys)
+	}
+
+	r.InlineKeyboard = inlineKeys
+}
+
+// InlineButton represents a button displayed in the message.
+type InlineButton struct {
+	// Unique slagish name for this kind of button,
+	// try to be as specific as possible.
+	//
+	// It will be used as a callback endpoint.
+	Unique string `json:"unique,omitempty"`
+
+	Text string `json:"text"`
+	URL  string `json:"url,omitempty"`
+	Data string `json:"callback_data,omitempty"`
+}
+
+func (b Btn) Inline() *InlineButton {
+	return &InlineButton{
+		Unique: b.Unique,
+		Text:   b.Text,
+		URL:    b.URL,
+		Data:   b.Data,
+	}
+}
