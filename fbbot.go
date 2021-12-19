@@ -70,7 +70,7 @@ type SendOptions struct {
 	DisableNotification interface{}
 }
 
-func (f *Bot) Send(chat Chat, what interface{}, options ...interface{}) (*Message, error) {
+func (f *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Message, error) {
 
 	var text string
 	switch w := what.(type) {
