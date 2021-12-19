@@ -150,7 +150,7 @@ func WebhookListen(bot *Bot) fasthttp.RequestHandler {
 }
 
 func TextHandler(bot *Bot, recipient FBChat, text string) {
-	textHandler, exist := bot.handlers[Text]
+	textHandler, exist := bot.handlers[OnText]
 	if exist {
 		handler, ok := textHandler.(func(recipient FBChat, message string))
 		if ok {

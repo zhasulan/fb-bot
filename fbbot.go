@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,15 +14,25 @@ import (
 // created on 15.12.21 23:00
 
 type Chat struct {
-	ID int64
+	ID int64 `json:"id"`
+
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Username  string `json:"username"`
 }
 
 type Message struct {
-	Chat
+	Chat *Chat  `json:"chat"`
+	Text string `json:"text"`
+
+	Contact Contact
 }
 
 const (
-	Text = "\atext"
+	OnText    = "\atext"
+	OnContact = "\acontact"
+	OnVoice   = "\avoice"
+	OnAudio   = "\aaudio"
 )
 
 type Settings struct {
@@ -47,30 +58,103 @@ type Bot struct {
 	handlers map[string]interface{}
 }
 
-func (f *Bot) Handle(endpoint, handler interface{}) {
+func (b *Bot) ChatByID() (Chat, error) {
+	return Chat{}, nil
+}
+
+func (b *Bot) Handle(endpoint, handler interface{}) {
 	switch end := endpoint.(type) {
 	case string:
-		f.handlers[end] = handler
+		b.handlers[end] = handler
 	default:
 		panic("fbbot: unsupported endpoint")
 	}
 }
 
 type ReplyButton struct {
-	Text string `json:"text"`
+	Text     string `json:"text"`
+	Contact  bool
+	Location bool
 }
 
 type ReplyMarkup struct {
-	ReplyKeyboard [][]ReplyButton `json:"keyboard,omitempty"`
+	ReplyKeyboard       [][]ReplyButton `json:"keyboard,omitempty"`
+	ResizeReplyKeyboard bool            `json:"resize_reply_keyboard"`
+	ReplyKeyboardRemove bool            `json:"reply_keyboard_remove"`
+}
+
+func (r *ReplyMarkup) Text() Btn {
+	return Btn{}
+}
+
+func (r *ReplyMarkup) Contact() Btn {
+	return Btn{}
+}
+
+func (r *ReplyMarkup) Row(many ...Btn) Row {
+	return many
+}
+
+func (r *ReplyMarkup) Reply(rows ...Row) {
+	replyKeys := make([][]ReplyButton, 0, len(rows))
+	for i, row := range rows {
+		keys := make([]ReplyButton, 0, len(row))
+		for j, btn := range row {
+			btn := btn.Reply()
+			if btn == nil {
+				panic(fmt.Sprintf(
+					"telebot: button row %d column %d is not a reply button",
+					i, j))
+			}
+			keys = append(keys, *btn)
+		}
+		replyKeys = append(replyKeys, keys)
+	}
+
+	r.ReplyKeyboard = replyKeys
 }
 
 type SendOptions struct {
-	ReplyMarkup         ReplyMarkup
+	ReplyMarkup         *ReplyMarkup
 	ParseMode           interface{}
 	DisableNotification interface{}
 }
 
-func (f *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Message, error) {
+type Btn struct {
+	Unique   string
+	Text     string
+	URL      string
+	Data     string
+	Contact  bool
+	Location bool
+}
+
+func (b Btn) Reply() *ReplyButton {
+	if b.Unique != "" {
+		return nil
+	}
+
+	return &ReplyButton{
+		Text:     b.Text,
+		Contact:  b.Contact,
+		Location: b.Location,
+	}
+}
+
+func (b *Btn) CallbackUnique() string {
+	if b.Unique != "" {
+		return "\f" + b.Unique
+	}
+	return b.Text
+}
+
+type Row []Btn
+
+func (b *Bot) SendAlbum(chat *Chat, album Album, options ...interface{}) ([]Message, error) {
+	return nil, nil
+}
+
+func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Message, error) {
 
 	var text string
 	switch w := what.(type) {
@@ -126,7 +210,7 @@ func (f *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 	}
 
 	query := request.URL.Query()
-	query.Add("access_token", f.PageAccessToken)
+	query.Add("access_token", b.PageAccessToken)
 	request.URL.RawQuery = query.Encode()
 
 	request.Header.Set("Content-Type", "application/json")
@@ -149,7 +233,37 @@ func (f *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 	return nil, nil // todo return message id
 }
 
-func (f *Bot) Start() {
+func (b *Bot) Start() {
 	webhook := Webhook{Port: "8080"}
-	webhook.WebhookServer(f)
+	webhook.WebhookServer(b)
 }
+
+// File object represents any sort of file.
+type File struct {
+	FileID   string `json:"file_id"`
+	UniqueID string `json:"file_unique_id"`
+	FileSize int    `json:"file_size"`
+
+	// file on telegram server https://core.telegram.org/bots/api#file
+	FilePath string `json:"file_path"`
+
+	// file on local file system.
+	FileLocal string `json:"file_local"`
+
+	// file on the internet
+	FileURL string `json:"file_url"`
+
+	// file backed with io.Reader
+	FileReader io.Reader `json:"-"`
+
+	fileName string
+}
+
+type ParseMode = string
+
+const (
+	ModeDefault    ParseMode = ""
+	ModeMarkdown   ParseMode = "Markdown"
+	ModeMarkdownV2 ParseMode = "MarkdownV2"
+	ModeHTML       ParseMode = "HTML"
+)
