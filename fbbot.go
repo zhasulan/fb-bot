@@ -92,11 +92,19 @@ type ReplyMarkup struct {
 }
 
 func (r *ReplyMarkup) Text(text string) Btn {
-	return Btn{}
+	return Btn{Text: text}
 }
 
 func (r *ReplyMarkup) Contact(text string) Btn {
-	return Btn{}
+	return Btn{Contact: true, Text: text}
+}
+
+func (r *ReplyMarkup) Data(text, unique string, data ...string) Btn {
+	return Btn{
+		Unique: unique,
+		Text:   text,
+		Data:   strings.Join(data, "|"),
+	}
 }
 
 func (r *ReplyMarkup) Row(many ...Btn) Row {
@@ -173,22 +181,32 @@ func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 	var elements []Element
 	for _, option := range options {
 		switch o := option.(type) {
-		case SendOptions:
-			for _, replyButtons := range o.ReplyMarkup.ReplyKeyboard {
-				var buttons []Button
-
+		case *SendOptions:
+			var buttons []Button
+			for _, replyButtons := range (*o.ReplyMarkup).ReplyKeyboard {
 				for _, replyButton := range replyButtons {
 					buttons = append(buttons, Button{
 						Type:    "postback",
 						Title:   replyButton.Text,
-						Payload: "",
+						Payload: replyButton.Text,
 					})
 				}
 
+				if len(buttons) == 3 {
+					elements = append(elements, Element{
+						Title:   "➡",
+						Buttons: buttons,
+					})
+					buttons = []Button{}
+				}
+			}
+
+			if len(buttons) != 3 && len(buttons) != 0 {
 				elements = append(elements, Element{
 					Title:   "➡",
 					Buttons: buttons,
 				})
+				buttons = []Button{}
 			}
 		}
 	}
@@ -197,6 +215,22 @@ func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 		Recipient: FBChat{ID: strconv.FormatInt(chat.ID, 10)},
 		Message: TextMessage{
 			Text: &text,
+		},
+	}
+
+	body, err := json.Marshal(textResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send Text
+	if e := b.facebookRequest(body); e != nil {
+		return nil, e
+	}
+
+	buttonsResponse := TextResponse{
+		Recipient: FBChat{ID: strconv.FormatInt(chat.ID, 10)},
+		Message: TextMessage{
 			Attachment: &Attachment{
 				Type: "template",
 				Payload: &Payload{
@@ -207,14 +241,22 @@ func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 		},
 	}
 
-	body, err := json.Marshal(textResponse)
+	body, err = json.Marshal(buttonsResponse)
 	if err != nil {
 		return nil, err
 	}
 
+	if e := b.facebookRequest(body); e != nil {
+		return nil, e
+	}
+
+	return nil, err
+}
+
+func (b *Bot) facebookRequest(body []byte) error {
 	request, err := http.NewRequest(http.MethodPost, "https://graph.facebook.com/v2.6/me/messages", bytes.NewBuffer(body))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	query := request.URL.Query()
@@ -225,7 +267,7 @@ func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer func() {
@@ -235,10 +277,10 @@ func (b *Bot) Send(chat *Chat, what interface{}, options ...interface{}) (*Messa
 	}()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("facebook return error status code: %d", response.StatusCode)
+		return fmt.Errorf("facebook return error status code: %d", response.StatusCode)
 	}
 
-	return nil, nil // todo return message id
+	return nil // todo return message id
 }
 
 func (b *Bot) Start() {
@@ -278,14 +320,6 @@ const (
 
 func FromReader(reader io.Reader) File {
 	return File{FileReader: reader}
-}
-
-func (r *ReplyMarkup) Data(text, unique string, data ...string) Btn {
-	return Btn{
-		Unique: unique,
-		Text:   text,
-		Data:   strings.Join(data, "|"),
-	}
 }
 
 func (r *ReplyMarkup) Inline(rows ...Row) {

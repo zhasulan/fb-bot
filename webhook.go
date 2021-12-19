@@ -61,12 +61,19 @@ type Read struct {
 	Watermark int `json:"watermark"`
 }
 
+type Postback struct {
+	Title   string `json:"title"`
+	Payload string `json:"payload"`
+	MID     string `json:"mid"`
+}
+
 type Messaging struct {
 	Sender    FBChat       `json:"sender"`
 	Recipient FBChat       `json:"recipient"`
 	Timestamp int          `json:"timestamp"`
 	Message   *SendMessage `json:"message"`
 	Read      *Read        `json:"read"`
+	Postback  *Postback    `json:"postback"`
 }
 
 type Entry struct {
@@ -141,12 +148,38 @@ func WebhookListen(bot *Bot) fasthttp.RequestHandler {
 						if messaging.Message != nil {
 							TextHandler(bot, messaging.Sender, messaging.Message.Text)
 						}
+
+						if messaging.Postback != nil {
+							ButtonHandler(bot, messaging.Sender, messaging.Postback.Payload)
+						}
 					}
 				}
 			}
 		}
 
 		ctx.SetStatusCode(http.StatusOK)
+	}
+}
+
+func ButtonHandler(bot *Bot, recipient FBChat, payload string) {
+	buttonHandler, exist := bot.handlers[payload]
+	if exist {
+		handler, ok := buttonHandler.(func(message *Message))
+		if ok {
+			chatID, _ := strconv.ParseInt(recipient.ID, 10, 64)
+			handler(&Message{
+				Chat: &Chat{
+					ID:        chatID,
+					FirstName: "",
+					LastName:  "",
+					Username:  "",
+				},
+				Text:    "",
+				Contact: nil,
+				Voice:   nil,
+			})
+			return
+		}
 	}
 }
 
@@ -170,5 +203,4 @@ func TextHandler(bot *Bot, recipient FBChat, text string) {
 			return
 		}
 	}
-
 }
